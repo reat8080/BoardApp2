@@ -1,10 +1,15 @@
 package com.example.boardapp
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.MediaPlayer
+import android.media.MediaRecorder
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -17,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
@@ -27,13 +33,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.room.*
 import coil.compose.AsyncImage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import java.io.File
 
 // 1. Entity
 @Entity(tableName = "items")
@@ -41,7 +50,7 @@ data class BoardItem(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
     val imageUri: String,
-    val audioUri: String,
+    val audioUri: String = "",
     val parentId: Long? = null
 )
 
@@ -80,6 +89,7 @@ abstract class AppDatabase : RoomDatabase() {
 class AudioPlayer(private val context: Context) {
     private var player: MediaPlayer? = null
     fun playAudio(uriString: String) {
+        if (uriString.isBlank()) return
         player?.release()
         try {
             player = MediaPlayer().apply {
@@ -93,7 +103,51 @@ class AudioPlayer(private val context: Context) {
     }
 }
 
-// 5. Activity
+// 5. Audio Recorder Helper
+class AudioRecorder(private val context: Context) {
+    private var recorder: MediaRecorder? = null
+    var currentOutputFile: File? = null
+
+    fun startRecording(): Boolean {
+        return try {
+            val audioDir = File(context.filesDir, "audios")
+            if (!audioDir.exists()) audioDir.mkdirs()
+            currentOutputFile = File(audioDir, "rec_${System.currentTimeMillis()}.m4a")
+
+            recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                MediaRecorder(context)
+            } else {
+                @Suppress("DEPRECATION")
+                MediaRecorder()
+            }.apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setOutputFile(currentOutputFile!!.absolutePath)
+                prepare()
+                start()
+            }
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    fun stopRecording(): String? {
+        return try {
+            recorder?.stop()
+            recorder?.release()
+            recorder = null
+            currentOutputFile?.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+}
+
+// 6. Activity
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -129,6 +183,7 @@ fun MainApp(dao: ItemDao, audioPlayer: AudioPlayer, context: Context) {
     ) {
         if (isEditMode) {
             EditScreen(
+                context = context,
                 allItems = allItems,
                 editingItem = itemToEdit,
                 onSave = { id, title, imgUri, audUri, parentId ->
@@ -240,7 +295,7 @@ fun DisplayScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            if (item.audioUri.isNotEmpty()) {
+                            if (item.audioUri.isNotBlank()) {
                                 audioPlayer.playAudio(item.audioUri)
                             }
                             if (allItems.any { it.parentId == item.id }) {
@@ -277,7 +332,6 @@ fun DisplayScreen(
                 }
             }
 
-            // آیکون تنظیمات فقط در صفحه اصلی ظاهر می‌شود و پیام متنی ندارد
             if (isRootScreen) {
                 item {
                     Card(
@@ -338,10 +392,11 @@ fun DisplayScreen(
     }
 }
 
-// --- حالت ساخت، ویرایش و مدیریت تمام زیرمجموعه‌ها ---
+// --- حالت ساخت، ویرایش و مدیریت ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditScreen(
+    context: Context,
     allItems: List<BoardItem>,
     editingItem: BoardItem?,
     onSave: (id: Long?, title: String, imgUri: String, audUri: String, parentId: Long?) -> Unit,
@@ -353,9 +408,13 @@ fun EditScreen(
 ) {
     var title by remember { mutableStateOf("") }
     var imageUri by remember { mutableStateOf<String?>(null) }
-    var audioUri by remember { mutableStateOf<String?>(null) }
+    var audioUri by remember { mutableStateOf("") }
     var selectedParentId by remember { mutableStateOf<Long?>(null) }
     var expanded by remember { mutableStateOf(false) }
+
+    // وضعیت ضبط صدا
+    var isRecording by remember { mutableStateOf(false) }
+    val audioRecorder = remember { AudioRecorder(context) }
 
     LaunchedEffect(editingItem) {
         if (editingItem != null) {
@@ -366,7 +425,7 @@ fun EditScreen(
         } else {
             title = ""
             imageUri = null
-            audioUri = null
+            audioUri = ""
             selectedParentId = null
         }
     }
@@ -382,6 +441,19 @@ fun EditScreen(
         uri?.let {
             onPersistUri(it)
             audioUri = it.toString()
+        }
+    }
+
+    // درخواست دسترسی میکروفون
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            if (audioRecorder.startRecording()) {
+                isRecording = true
+            }
+        } else {
+            Toast.makeText(context, "دسترسی میکروفون رد شد", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -422,27 +494,69 @@ fun EditScreen(
             )
         )
 
+        // انتخاب تصویر
+        Button(
+            onClick = { imagePicker.launch(arrayOf("image/*")) },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = if (imageUri == null) Color(0xFF1976D2) else Color(0xFF388E3C))
+        ) {
+            Text(if (imageUri == null) "انتخاب عکس (الزامی)" else "عکس ثبت شد ✓", fontSize = 13.sp)
+        }
+
+        // بخش صوت (اختیاری: انتخاب فایل یا ضبط با میکروفن)
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Button(
-                onClick = { imagePicker.launch(arrayOf("image/*")) },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = if (imageUri == null) Color(0xFF1976D2) else Color(0xFF388E3C))
-            ) {
-                Text(if (imageUri == null) "انتخاب عکس" else "عکس ثبت شد ✓", fontSize = 13.sp)
-            }
-
+            // دکمه انتخاب فایل صوتی
             Button(
                 onClick = { audioPicker.launch(arrayOf("audio/*")) },
                 modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = if (audioUri == null) Color(0xFF1976D2) else Color(0xFF388E3C))
+                colors = ButtonDefaults.buttonColors(containerColor = if (audioUri.isBlank()) Color(0xFF1976D2) else Color(0xFF388E3C))
             ) {
-                Text(if (audioUri == null) "انتخاب صوت" else "صوت ثبت شد ✓", fontSize = 13.sp)
+                Text(if (audioUri.isBlank()) "فایل صوت" else "صوت ثبت شد ✓", fontSize = 12.sp)
+            }
+
+            // دکمه ضبط مستقیم با میکروفن
+            Button(
+                onClick = {
+                    if (!isRecording) {
+                        val hasPermission = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO
+                        ) == PackageManager.PERMISSION_GRANTED
+
+                        if (hasPermission) {
+                            if (audioRecorder.startRecording()) isRecording = true
+                        } else {
+                            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    } else {
+                        val filePath = audioRecorder.stopRecording()
+                        isRecording = false
+                        if (filePath != null) {
+                            audioUri = filePath
+                        }
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = if (isRecording) Color(0xFFD32F2F) else Color(0xFF0288D1))
+            ) {
+                Text(if (isRecording) "■ توقف ضبط" else "● ضبط با میکروفون", fontSize = 12.sp)
+            }
+
+            // حذف صوت در صورت ثبت بودن
+            if (audioUri.isNotBlank()) {
+                IconButton(
+                    onClick = { audioUri = "" },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = "حذف صوت", tint = Color(0xFFD32F2F))
+                }
             }
         }
 
+        // انتخاب والد
         ExposedDropdownMenuBox(
             expanded = expanded,
             onExpandedChange = { expanded = !expanded }
@@ -485,6 +599,7 @@ fun EditScreen(
             }
         }
 
+        // دکمه‌های ذخیره / انصراف (تنها شرط الزامی: عنوان و تصویر)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -499,14 +614,14 @@ fun EditScreen(
             }
             Button(
                 onClick = {
-                    if (title.isNotEmpty() && imageUri != null && audioUri != null) {
-                        onSave(editingItem?.id, title, imageUri!!, audioUri!!, selectedParentId)
+                    if (title.isNotEmpty() && imageUri != null) {
+                        onSave(editingItem?.id, title, imageUri!!, audioUri, selectedParentId)
                         title = ""
                         imageUri = null
-                        audioUri = null
+                        audioUri = ""
                     }
                 },
-                enabled = title.isNotEmpty() && imageUri != null && audioUri != null,
+                enabled = title.isNotEmpty() && imageUri != null,
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
             ) {
@@ -517,7 +632,7 @@ fun EditScreen(
         Divider(modifier = Modifier.padding(vertical = 4.dp), color = Color(0xFF90CAF9))
 
         Text(
-            text = "تمام جایگاه‌ها (اصلی و زیرمجموعه‌ها) برای ویرایش یا حذف:",
+            text = "تمام جایگاه‌ها (جهت ویرایش یا حذف):",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF0D47A1)
@@ -559,7 +674,7 @@ fun EditScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "مادر: $parentName",
+                            text = "مادر: $parentName" + if (item.audioUri.isNotBlank()) " | دارای صوت" else " | بدون صوت",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.Gray,
                             fontSize = 11.sp
