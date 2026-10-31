@@ -5,7 +5,6 @@ import android.content.Intent
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -28,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -111,7 +109,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// رنگ آبی روشن برای پس‌زمینه
 val SoftLightBlue = Color(0xFFE3F2FD)
 
 @Composable
@@ -132,9 +129,7 @@ fun MainApp(dao: ItemDao, audioPlayer: AudioPlayer, context: Context) {
     ) {
         if (isEditMode) {
             EditScreen(
-                currentParentId = currentParentId,
-                items = currentItems,
-                availableParents = allItems,
+                allItems = allItems,
                 editingItem = itemToEdit,
                 onSave = { id, title, imgUri, audUri, parentId ->
                     coroutineScope.launch {
@@ -181,7 +176,7 @@ fun MainApp(dao: ItemDao, audioPlayer: AudioPlayer, context: Context) {
             DisplayScreen(
                 items = currentItems,
                 allItems = allItems,
-                canGoBack = backStack.isNotEmpty(),
+                isRootScreen = backStack.isEmpty(),
                 audioPlayer = audioPlayer,
                 onNavigateToChild = { childId ->
                     backStack.add(currentParentId)
@@ -205,13 +200,12 @@ fun MainApp(dao: ItemDao, audioPlayer: AudioPlayer, context: Context) {
 fun DisplayScreen(
     items: List<BoardItem>,
     allItems: List<BoardItem>,
-    canGoBack: Boolean,
+    isRootScreen: Boolean,
     audioPlayer: AudioPlayer,
     onNavigateToChild: (Long) -> Unit,
     onBack: () -> Unit,
     onUnlockEditMode: () -> Unit
 ) {
-    val context = LocalContext.current
     var clickCount by remember { mutableIntStateOf(0) }
     var lastClickTime by remember { mutableLongStateOf(0L) }
 
@@ -220,13 +214,16 @@ fun DisplayScreen(
             .fillMaxSize()
             .statusBarsPadding()
     ) {
-        if (canGoBack) {
+        if (!isRootScreen) {
             Button(
                 onClick = onBack,
-                modifier = Modifier.padding(12.dp),
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
             ) {
-                Text("بازگشت به سطح قبلی", color = Color.White)
+                Text("بازگشت به سطح قبلی", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -234,11 +231,10 @@ fun DisplayScreen(
             columns = GridCells.Fixed(2),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            // کارت‌های برنامه
             items(items) { item ->
                 Card(
                     modifier = Modifier
@@ -258,7 +254,7 @@ fun DisplayScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(10.dp),
+                            .padding(12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         AsyncImage(
@@ -270,7 +266,7 @@ fun DisplayScreen(
                                 .clip(RoundedCornerShape(12.dp)),
                             contentScale = ContentScale.Crop
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text(
                             text = item.title,
                             style = MaterialTheme.typography.titleMedium,
@@ -281,64 +277,60 @@ fun DisplayScreen(
                 }
             }
 
-            // کارت ورود به تنظیمات و ویرایش (۳ بار تاچ سریع)
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            val currentTime = System.currentTimeMillis()
-                            if (currentTime - lastClickTime < 1000) {
-                                clickCount++
-                            } else {
-                                clickCount = 1
-                            }
-                            lastClickTime = currentTime
-
-                            if (clickCount == 3) {
-                                clickCount = 0
-                                onUnlockEditMode()
-                            } else {
-                                Toast.makeText(
-                                    context,
-                                    "${3 - clickCount} بار تاچ دیگر برای ورود به ویرایش",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFBBDEFB)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(
+            // آیکون تنظیمات فقط در صفحه اصلی ظاهر می‌شود و پیام متنی ندارد
+            if (isRootScreen) {
+                item {
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(10.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                            .clickable {
+                                val currentTime = System.currentTimeMillis()
+                                if (currentTime - lastClickTime < 1000) {
+                                    clickCount++
+                                } else {
+                                    clickCount = 1
+                                }
+                                lastClickTime = currentTime
+
+                                if (clickCount >= 3) {
+                                    clickCount = 0
+                                    onUnlockEditMode()
+                                }
+                            },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFBBDEFB)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
-                        Box(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .aspectRatio(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFF90CAF9)),
-                            contentAlignment = Alignment.Center
+                                .padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "تنظیمات",
-                                modifier = Modifier.size(64.dp),
-                                tint = Color(0xFF0D47A1)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF90CAF9)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "تنظیمات",
+                                    modifier = Modifier.size(64.dp),
+                                    tint = Color(0xFF0D47A1)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "تنظیمات",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0D47A1)
                             )
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "تنظیمات و ساخت",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF0D47A1)
-                        )
                     }
                 }
             }
@@ -346,13 +338,11 @@ fun DisplayScreen(
     }
 }
 
-// --- حالت ساخت، ویرایش و حذف ---
+// --- حالت ساخت، ویرایش و مدیریت تمام زیرمجموعه‌ها ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditScreen(
-    currentParentId: Long?,
-    items: List<BoardItem>,
-    availableParents: List<BoardItem>,
+    allItems: List<BoardItem>,
     editingItem: BoardItem?,
     onSave: (id: Long?, title: String, imgUri: String, audUri: String, parentId: Long?) -> Unit,
     onDelete: (BoardItem) -> Unit,
@@ -364,7 +354,7 @@ fun EditScreen(
     var title by remember { mutableStateOf("") }
     var imageUri by remember { mutableStateOf<String?>(null) }
     var audioUri by remember { mutableStateOf<String?>(null) }
-    var selectedParentId by remember { mutableStateOf(currentParentId) }
+    var selectedParentId by remember { mutableStateOf<Long?>(null) }
     var expanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(editingItem) {
@@ -377,7 +367,7 @@ fun EditScreen(
             title = ""
             imageUri = null
             audioUri = null
-            selectedParentId = currentParentId
+            selectedParentId = null
         }
     }
 
@@ -421,11 +411,10 @@ fun EditScreen(
             }
         }
 
-        // فیلدهای فرم
         OutlinedTextField(
             value = title,
             onValueChange = { title = it },
-            label = { Text("عنوان") },
+            label = { Text("عنوان جایگاه") },
             modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = Color.White,
@@ -435,14 +424,14 @@ fun EditScreen(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Button(
                 onClick = { imagePicker.launch(arrayOf("image/*")) },
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(containerColor = if (imageUri == null) Color(0xFF1976D2) else Color(0xFF388E3C))
             ) {
-                Text(if (imageUri == null) "انتخاب عکس" else "عکس ثبت شد ✓", fontSize = 12.sp)
+                Text(if (imageUri == null) "انتخاب عکس" else "عکس ثبت شد ✓", fontSize = 13.sp)
             }
 
             Button(
@@ -450,21 +439,20 @@ fun EditScreen(
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(containerColor = if (audioUri == null) Color(0xFF1976D2) else Color(0xFF388E3C))
             ) {
-                Text(if (audioUri == null) "انتخاب صوت" else "صوت ثبت شد ✓", fontSize = 12.sp)
+                Text(if (audioUri == null) "انتخاب صوت" else "صوت ثبت شد ✓", fontSize = 13.sp)
             }
         }
 
-        // انتخاب والد
         ExposedDropdownMenuBox(
             expanded = expanded,
             onExpandedChange = { expanded = !expanded }
         ) {
-            val parentName = availableParents.find { it.id == selectedParentId }?.title ?: "بدون مادر (سطح اصلی)"
+            val parentName = allItems.find { it.id == selectedParentId }?.title ?: "بدون مادر (صفحه اصلی)"
             OutlinedTextField(
                 value = parentName,
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("جایگاه مادر") },
+                label = { Text("محل قرارگیری (جایگاه مادر)") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 modifier = Modifier
                     .menuAnchor()
@@ -479,13 +467,13 @@ fun EditScreen(
                 onDismissRequest = { expanded = false }
             ) {
                 DropdownMenuItem(
-                    text = { Text("بدون مادر (سطح اصلی)") },
+                    text = { Text("بدون مادر (صفحه اصلی)") },
                     onClick = {
                         selectedParentId = null
                         expanded = false
                     }
                 )
-                availableParents.filter { it.id != editingItem?.id }.forEach { parent ->
+                allItems.filter { it.id != editingItem?.id }.forEach { parent ->
                     DropdownMenuItem(
                         text = { Text(parent.title) },
                         onClick = {
@@ -497,10 +485,9 @@ fun EditScreen(
             }
         }
 
-        // دکمه‌های ذخیره / انصراف فرم
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             if (editingItem != null) {
                 OutlinedButton(
@@ -523,30 +510,30 @@ fun EditScreen(
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
             ) {
-                Text(if (editingItem != null) "ثبت تغییرات" else "ذخیره آیتم")
+                Text(if (editingItem != null) "ثبت تغییرات" else "ذخیره جایگاه")
             }
         }
 
         Divider(modifier = Modifier.padding(vertical = 4.dp), color = Color(0xFF90CAF9))
 
         Text(
-            text = "آیتم‌های موجود در این سطح (جهت ویرایش یا حذف):",
+            text = "تمام جایگاه‌ها (اصلی و زیرمجموعه‌ها) برای ویرایش یا حذف:",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF0D47A1)
         )
 
-        // لیست آیتم‌ها همراه با دکمه ویرایش و حذف
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            items(items) { item ->
+            items(allItems) { item ->
+                val parentName = allItems.find { it.id == item.parentId }?.title ?: "صفحه اصلی"
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
@@ -570,6 +557,12 @@ fun EditScreen(
                             text = item.title,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "مادر: $parentName",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray,
+                            fontSize = 11.sp
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(
