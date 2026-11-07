@@ -18,8 +18,11 @@ import com.example.boardapp.data.AppDatabase
 import com.example.boardapp.data.BackgroundSyncWorker
 import com.example.boardapp.data.BoardItem
 import com.example.boardapp.data.ItemDao
+import com.example.boardapp.data.SyncManager
 import com.example.boardapp.ui.DisplayScreen
 import com.example.boardapp.ui.EditScreen
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 val CalmLiteBlue = Color(0xFFEDF6FD)
@@ -33,10 +36,8 @@ class MainActivity : ComponentActivity() {
         val dao = db.itemDao()
         audioPlayer = AudioPlayer(this)
 
-        // ۱. بررسی و دانلود اطلاعات اولیه در اولین نصب یا راه‌اندازی
+        // دانلود داده‌های اولیه از سرور هنگام اجرا
         BackgroundSyncWorker.triggerInitialSync(this)
-        
-        // ۲. برنامه‌ریزی برای چک روزانه در پس‌زمینه بدون اختلال در کار کاربر
         BackgroundSyncWorker.scheduleDailySync(this)
 
         setContent {
@@ -63,6 +64,10 @@ fun MainApp(dao: ItemDao, audioPlayer: AudioPlayer, context: Context) {
     val allItems by dao.getAllItems().collectAsState(initial = emptyList())
     val coroutineScope = rememberCoroutineScope()
 
+    // آدرس دقیق سرور هاست شما
+    val serverBaseUrl = "https://omidanit.ca/boardapp"
+    val syncManager = remember { SyncManager(context, serverBaseUrl) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -74,25 +79,39 @@ fun MainApp(dao: ItemDao, audioPlayer: AudioPlayer, context: Context) {
                 allItems = allItems,
                 editingItem = itemToEdit,
                 onSave = { id, title, imgUri, audUri, parentId ->
-                    coroutineScope.launch {
+                    coroutineScope.launch(Dispatchers.IO) {
+                        // ۱. کپی امن فایل‌ها به حافظه داخلی
+                        val localImagePath = syncManager.copyUriToInternalStorage(imgUri, "img")
+                        val localAudioPath = if (audUri.isNotBlank()) {
+                            syncManager.copyUriToInternalStorage(audUri, "aud")
+                        } else ""
+
+                        // ۲. ذخیره در دیتابیس گوشی
                         dao.insertItem(
                             BoardItem(
                                 id = id ?: 0,
                                 title = title,
-                                imageUri = imgUri,
-                                audioUri = audUri,
+                                imageUri = localImagePath,
+                                audioUri = localAudioPath,
                                 parentId = parentId
                             )
                         )
                         itemToEdit = null
+
+                        // ۳. ارسال مستقیم و فوری فایل‌ها و متادیتا به هاست omidanit.ca
+                        val updatedList = dao.getAllItems().first()
+                        syncManager.pushData(updatedList)
                     }
                 },
                 onDelete = { item ->
-                    coroutineScope.launch {
+                    coroutineScope.launch(Dispatchers.IO) {
                         dao.deleteItem(item)
                         if (itemToEdit?.id == item.id) {
                             itemToEdit = null
                         }
+                        // به‌روزرسانی هاست بعد از حذف آیتم
+                        val updatedList = dao.getAllItems().first()
+                        syncManager.pushData(updatedList)
                     }
                 },
                 onSelectToEdit = { item -> itemToEdit = item },
