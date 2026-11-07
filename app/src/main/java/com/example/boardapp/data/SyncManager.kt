@@ -20,15 +20,16 @@ class SyncManager(private val context: Context, private val baseUrl: String) {
 
     data class RemoteItem(
         val id: Long,
-        val title: String,
+        val titleFa: String,
+        val titleEn: String,
         val imageFileName: String,
-        val audioFileName: String,
+        val audioFileNameFa: String,
+        val audioFileNameEn: String,
         val parentId: Long?
     )
 
     data class SyncPayload(val items: List<RemoteItem>)
 
-    // کپی امن فایل انتخاب‌شده از گالری به فضای ذخیره‌سازی دائمی اپلیکیشن
     fun copyUriToInternalStorage(uriString: String, prefix: String): String {
         return try {
             val uri = Uri.parse(uriString)
@@ -48,49 +49,53 @@ class SyncManager(private val context: Context, private val baseUrl: String) {
         }
     }
 
-    // دریافت داده‌ها از سرور
-    suspend fun pullData(dao: ItemDao) = withContext(Dispatchers.IO) {
+    suspend fun pullData(dao: ItemDao): Boolean = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder().url("$baseUrl/sync.php?action=pull").build()
             val response = client.newCall(request).execute()
-            if (!response.isSuccessful) return@withContext
+            if (!response.isSuccessful) return@withContext false
 
-            val body = response.body?.string() ?: return@withContext
-            val payload = gson.fromJson(body, SyncPayload::class.java) ?: return@withContext
+            val body = response.body?.string() ?: return@withContext false
+            val payload = gson.fromJson(body, SyncPayload::class.java) ?: return@withContext false
 
             for (remote in payload.items) {
                 val localImg = downloadFileIfMissing(remote.imageFileName)
-                val localAud = if (remote.audioFileName.isNotBlank()) {
-                    downloadFileIfMissing(remote.audioFileName).absolutePath
-                } else ""
+                val localAudFa = if (remote.audioFileNameFa.isNotBlank()) downloadFileIfMissing(remote.audioFileNameFa).absolutePath else ""
+                val localAudEn = if (remote.audioFileNameEn.isNotBlank()) downloadFileIfMissing(remote.audioFileNameEn).absolutePath else ""
 
                 dao.insertItem(
                     BoardItem(
                         id = remote.id,
-                        title = remote.title,
+                        titleFa = remote.titleFa,
+                        titleEn = remote.titleEn,
                         imageUri = localImg.absolutePath,
-                        audioUri = localAud,
+                        audioUriFa = localAudFa,
+                        audioUriEn = localAudEn,
                         parentId = remote.parentId
                     )
                 )
             }
+            true
         } catch (e: Exception) {
             e.printStackTrace()
+            false
         }
     }
 
-    // ارسال داده‌ها و آپلود فایل‌ها به هاست
-    suspend fun pushData(items: List<BoardItem>) = withContext(Dispatchers.IO) {
+    suspend fun pushData(items: List<BoardItem>): Boolean = withContext(Dispatchers.IO) {
         try {
             val remoteList = items.map { item ->
                 val uploadedImg = uploadFile(File(item.imageUri))
-                val uploadedAud = if (item.audioUri.isNotBlank()) uploadFile(File(item.audioUri)) else ""
+                val uploadedAudFa = if (item.audioUriFa.isNotBlank()) uploadFile(File(item.audioUriFa)) else ""
+                val uploadedAudEn = if (item.audioUriEn.isNotBlank()) uploadFile(File(item.audioUriEn)) else ""
 
                 RemoteItem(
                     id = item.id,
-                    title = item.title,
+                    titleFa = item.titleFa,
+                    titleEn = item.titleEn,
                     imageFileName = uploadedImg,
-                    audioFileName = uploadedAud,
+                    audioFileNameFa = uploadedAudFa,
+                    audioFileNameEn = uploadedAudEn,
                     parentId = item.parentId
                 )
             }
@@ -102,9 +107,11 @@ class SyncManager(private val context: Context, private val baseUrl: String) {
                 .post(reqBody)
                 .build()
 
-            client.newCall(request).execute()
+            val response = client.newCall(request).execute()
+            response.isSuccessful
         } catch (e: Exception) {
             e.printStackTrace()
+            false
         }
     }
 
