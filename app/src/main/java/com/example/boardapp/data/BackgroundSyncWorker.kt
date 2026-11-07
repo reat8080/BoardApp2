@@ -8,9 +8,9 @@ class BackgroundSyncWorker(context: Context, params: WorkerParameters) : Corouti
     override suspend fun doWork(): Result {
         val db = AppDatabase.getDatabase(applicationContext)
         val dao = db.itemDao()
-        val syncManager = SyncManager(applicationContext, "https://omidanit.ca/boardapp") // آدرس سرور
+        val syncManager = SyncManager(applicationContext, "https://omidanit.ca/boardapp")
 
-        // ۱. دریافت تغییرات جدید از هاست
+        // دریافت تغییرات جدید از هاست
         syncManager.pullData(dao)
         return Result.success()
     }
