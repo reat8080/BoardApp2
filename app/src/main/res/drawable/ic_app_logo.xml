@@ -1,0 +1,23 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- پس‌زمینه گرد -->
+    <path
+        android:fillColor="#1976D2"
+        android:pathData="M54,4 C26.39,4 4,26.39 4,54 C4,81.61 26.39,104 54,104 C81.61,104 104,81.61 104,54 C104,26.39 81.61,4 54,4 Z" />
+    <!-- ۴ خانه مربعی شبکه‌ای (نماد بورد) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,24 h26 v26 h-26 z" />
+    <path
+        android:fillColor="#E3F2FD"
+        android:pathData="M58,24 h26 v26 h-26 z" />
+    <path
+        android:fillColor="#E3F2FD"
+        android:pathData="M24,58 h26 v26 h-26 z" />
+    <path
+        android:fillColor="#64B5F6"
+        android:pathData="M58,58 h26 v26 h-26 z" />
+</vector>
