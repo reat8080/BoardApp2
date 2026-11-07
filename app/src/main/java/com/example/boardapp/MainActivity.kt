@@ -15,11 +15,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -33,8 +35,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -147,7 +149,6 @@ class AudioRecorder(private val context: Context) {
     }
 }
 
-// 6. Activity
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -163,7 +164,8 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-val SoftLightBlue = Color(0xFFE3F2FD)
+// رنگ آبی روشن ملایم و کودک‌پسند
+val CalmLiteBlue = Color(0xFFEDF6FD)
 
 @Composable
 fun MainApp(dao: ItemDao, audioPlayer: AudioPlayer, context: Context) {
@@ -179,7 +181,7 @@ fun MainApp(dao: ItemDao, audioPlayer: AudioPlayer, context: Context) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(SoftLightBlue)
+            .background(CalmLiteBlue)
     ) {
         if (isEditMode) {
             EditScreen(
@@ -264,129 +266,113 @@ fun DisplayScreen(
     var clickCount by remember { mutableIntStateOf(0) }
     var lastClickTime by remember { mutableLongStateOf(0L) }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
     ) {
-        if (!isRootScreen) {
-            Button(
-                onClick = onBack,
-                modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
-                    .height(48.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
-            ) {
-                Text("بازگشت به سطح قبلی", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-            horizontalArrangement = Arrangement.spacedBy(18.dp)
-        ) {
-            items(items) { item ->
-                Card(
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (!isRootScreen) {
+                Button(
+                    onClick = onBack,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            if (item.audioUri.isNotBlank()) {
-                                audioPlayer.playAudio(item.audioUri)
-                            }
-                            if (allItems.any { it.parentId == item.id }) {
-                                onNavigateToChild(item.id)
-                            }
-                        },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        AsyncImage(
-                            model = item.imageUri,
-                            contentDescription = item.title,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(1f)
-                                .clip(RoundedCornerShape(12.dp)),
-                            contentScale = ContentScale.Crop
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = item.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF212121)
-                        )
-                    }
+                    Text("بازگشت", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
-            if (isRootScreen) {
-                item {
+            // شبکه ریسپانسیو: در گوشی ۲ ستون، در تبلت خودکار ۳ یا ۴ ستون متناسب ایجاد می‌کند
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 145.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = if (isRootScreen) 80.dp else 16.dp)
+            ) {
+                items(items) { item ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                val currentTime = System.currentTimeMillis()
-                                if (currentTime - lastClickTime < 1000) {
-                                    clickCount++
-                                } else {
-                                    clickCount = 1
+                                if (item.audioUri.isNotBlank()) {
+                                    audioPlayer.playAudio(item.audioUri)
                                 }
-                                lastClickTime = currentTime
-
-                                if (clickCount >= 3) {
-                                    clickCount = 0
-                                    onUnlockEditMode()
+                                if (allItems.any { it.parentId == item.id }) {
+                                    onNavigateToChild(item.id)
                                 }
                             },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFBBDEFB)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
+                                .padding(10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Box(
+                            AsyncImage(
+                                model = item.imageUri,
+                                contentDescription = item.title,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(1f)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color(0xFF90CAF9)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Settings,
-                                    contentDescription = "تنظیمات",
-                                    modifier = Modifier.size(64.dp),
-                                    tint = Color(0xFF0D47A1)
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(10.dp))
+                                    .clip(RoundedCornerShape(14.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "تنظیمات",
+                                text = item.title,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF0D47A1)
+                                color = Color(0xFF1A1A1A),
+                                textAlign = TextAlign.Center,
+                                maxLines = 1
                             )
                         }
                     }
                 }
+            }
+        }
+
+        // دکمه تنظیمات با اندازه ۱/۴ بقیه (کوچک و ظریف در پایین صفحه) فقط در صفحه اصلی
+        if (isRootScreen) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp)
+                    .size(54.dp) // اندازه یک‌چهارم کارت‌های اصلی
+                    .clip(CircleShape)
+                    .background(Color(0xFFBBDEFB).copy(alpha = 0.85f))
+                    .border(1.5.dp, Color(0xFF90CAF9), CircleShape)
+                    .clickable {
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastClickTime < 1000) {
+                            clickCount++
+                        } else {
+                            clickCount = 1
+                        }
+                        lastClickTime = currentTime
+
+                        if (clickCount >= 3) {
+                            clickCount = 0
+                            onUnlockEditMode()
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "تنظیمات",
+                    modifier = Modifier.size(26.dp),
+                    tint = Color(0xFF0D47A1)
+                )
             }
         }
     }
@@ -412,7 +398,6 @@ fun EditScreen(
     var selectedParentId by remember { mutableStateOf<Long?>(null) }
     var expanded by remember { mutableStateOf(false) }
 
-    // وضعیت ضبط صدا
     var isRecording by remember { mutableStateOf(false) }
     val audioRecorder = remember { AudioRecorder(context) }
 
@@ -444,7 +429,6 @@ fun EditScreen(
         }
     }
 
-    // درخواست دسترسی میکروفون
     val micPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -494,7 +478,6 @@ fun EditScreen(
             )
         )
 
-        // انتخاب تصویر
         Button(
             onClick = { imagePicker.launch(arrayOf("image/*")) },
             modifier = Modifier.fillMaxWidth(),
@@ -503,12 +486,10 @@ fun EditScreen(
             Text(if (imageUri == null) "انتخاب عکس (الزامی)" else "عکس ثبت شد ✓", fontSize = 13.sp)
         }
 
-        // بخش صوت (اختیاری: انتخاب فایل یا ضبط با میکروفن)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // دکمه انتخاب فایل صوتی
             Button(
                 onClick = { audioPicker.launch(arrayOf("audio/*")) },
                 modifier = Modifier.weight(1f),
@@ -517,7 +498,6 @@ fun EditScreen(
                 Text(if (audioUri.isBlank()) "فایل صوت" else "صوت ثبت شد ✓", fontSize = 12.sp)
             }
 
-            // دکمه ضبط مستقیم با میکروفن
             Button(
                 onClick = {
                     if (!isRecording) {
@@ -545,7 +525,6 @@ fun EditScreen(
                 Text(if (isRecording) "■ توقف ضبط" else "● ضبط با میکروفون", fontSize = 12.sp)
             }
 
-            // حذف صوت در صورت ثبت بودن
             if (audioUri.isNotBlank()) {
                 IconButton(
                     onClick = { audioUri = "" },
@@ -556,7 +535,6 @@ fun EditScreen(
             }
         }
 
-        // انتخاب والد
         ExposedDropdownMenuBox(
             expanded = expanded,
             onExpandedChange = { expanded = !expanded }
@@ -599,7 +577,6 @@ fun EditScreen(
             }
         }
 
-        // دکمه‌های ذخیره / انصراف (تنها شرط الزامی: عنوان و تصویر)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -639,10 +616,10 @@ fun EditScreen(
         )
 
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Adaptive(minSize = 135.dp),
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(allItems) { item ->
                 val parentName = allItems.find { it.id == item.parentId }?.title ?: "صفحه اصلی"
@@ -674,7 +651,7 @@ fun EditScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "مادر: $parentName" + if (item.audioUri.isNotBlank()) " | دارای صوت" else " | بدون صوت",
+                            text = "مادر: $parentName" + if (item.audioUri.isNotBlank()) " | با صوت" else "",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.Gray,
                             fontSize = 11.sp
