@@ -32,6 +32,12 @@ class MainActivity : ComponentActivity() {
         val dao = db.itemDao()
         audioPlayer = AudioPlayer(this)
 
+            // ۱. بررسی و دانلود اطلاعات اولیه در اولین نصب یا راه‌اندازی
+        BackgroundSyncWorker.triggerInitialSync(this)
+        
+        // ۲. برنامه‌ریزی برای چک روزانه در پس‌زمینه بدون اختلال در کار کاربر
+        BackgroundSyncWorker.scheduleDailySync(this)
+
         setContent {
             MaterialTheme {
                 MainApp(dao = dao, audioPlayer = audioPlayer, context = this)
