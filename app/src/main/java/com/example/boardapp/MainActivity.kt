@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.example.boardapp.audio.AudioPlayer
 import com.example.boardapp.data.AppDatabase
+import com.example.boardapp.data.BackgroundSyncWorker
 import com.example.boardapp.data.BoardItem
 import com.example.boardapp.data.ItemDao
 import com.example.boardapp.ui.DisplayScreen
@@ -32,7 +33,7 @@ class MainActivity : ComponentActivity() {
         val dao = db.itemDao()
         audioPlayer = AudioPlayer(this)
 
-            // ۱. بررسی و دانلود اطلاعات اولیه در اولین نصب یا راه‌اندازی
+        // ۱. بررسی و دانلود اطلاعات اولیه در اولین نصب یا راه‌اندازی
         BackgroundSyncWorker.triggerInitialSync(this)
         
         // ۲. برنامه‌ریزی برای چک روزانه در پس‌زمینه بدون اختلال در کار کاربر
