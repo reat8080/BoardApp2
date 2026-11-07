@@ -38,10 +38,11 @@ class SyncManager(private val context: Context, private val baseUrl: String) {
             val payload = gson.fromJson(body, SyncPayload::class.java)
 
             for (remote in payload.items) {
-                // دانلود تصویر در صورت عدم وجود
+                // دانلود تصویر
                 val localImg = downloadFileIfMissing(remote.imageFileName)
+                // دانلود صوت (در صورت وجود، مسیر متنی برگردانده می‌شود)
                 val localAud = if (remote.audioFileName.isNotBlank()) {
-                    downloadFileIfMissing(remote.audioFileName)
+                    downloadFileIfMissing(remote.audioFileName).absolutePath
                 } else ""
 
                 dao.insertItem(
