@@ -31,6 +31,8 @@ fun DisplayScreen(
     items: List<BoardItem>,
     allItems: List<BoardItem>,
     isRootScreen: Boolean,
+    isPersian: Boolean,
+    scaleFactor: Float,
     audioPlayer: AudioPlayer,
     onNavigateToChild: (Long) -> Unit,
     onBack: () -> Unit,
@@ -38,6 +40,10 @@ fun DisplayScreen(
 ) {
     var clickCount by remember { mutableIntStateOf(0) }
     var lastClickTime by remember { mutableLongStateOf(0L) }
+
+    // محاسبه سایز کارت بر اساس ضریب مقیاس (پایه 140dp)
+    val itemMinSize = (140 * scaleFactor).dp
+    val fontSize = (16 * (1f + (scaleFactor - 1f) * 0.35f)).sp
 
     Box(
         modifier = Modifier
@@ -54,17 +60,22 @@ fun DisplayScreen(
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
                 ) {
-                    Text("بازگشت", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (isPersian) "بازگشت" else "Back",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 145.dp),
+                columns = GridCells.Adaptive(minSize = itemMinSize),
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy((16 * scaleFactor).dp),
+                horizontalArrangement = Arrangement.spacedBy((16 * scaleFactor).dp),
                 contentPadding = PaddingValues(bottom = if (isRootScreen) 80.dp else 16.dp)
             ) {
                 items(items) { item ->
@@ -72,8 +83,9 @@ fun DisplayScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                if (item.audioUri.isNotBlank()) {
-                                    audioPlayer.playAudio(item.audioUri)
+                                val audio = item.getAudio(isPersian)
+                                if (audio.isNotBlank()) {
+                                    audioPlayer.playAudio(audio)
                                 }
                                 if (allItems.any { it.parentId == item.id }) {
                                     onNavigateToChild(item.id)
@@ -91,7 +103,7 @@ fun DisplayScreen(
                         ) {
                             AsyncImage(
                                 model = item.imageUri,
-                                contentDescription = item.title,
+                                contentDescription = item.getTitle(isPersian),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(1f)
@@ -100,8 +112,9 @@ fun DisplayScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = item.title,
+                                text = item.getTitle(isPersian),
                                 style = MaterialTheme.typography.titleMedium,
+                                fontSize = fontSize,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF1A1A1A),
                                 textAlign = TextAlign.Center,
@@ -140,7 +153,7 @@ fun DisplayScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Settings,
-                    contentDescription = "تنظیمات",
+                    contentDescription = if (isPersian) "تنظیمات" else "Settings",
                     modifier = Modifier.size(26.dp),
                     tint = Color(0xFF0D47A1)
                 )
