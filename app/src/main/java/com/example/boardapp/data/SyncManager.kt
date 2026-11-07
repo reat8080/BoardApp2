@@ -1,6 +1,7 @@
 package com.example.boardapp.data
 
 import android.content.Context
+import android.net.Uri
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -27,7 +28,27 @@ class SyncManager(private val context: Context, private val baseUrl: String) {
 
     data class SyncPayload(val items: List<RemoteItem>)
 
-    // دریافت داده‌ها از سرور و دانلود عکس‌ها و فایل‌های صوتی
+    // کپی امن فایل انتخاب‌شده از گالری به فضای ذخیره‌سازی دائمی اپلیکیشن
+    fun copyUriToInternalStorage(uriString: String, prefix: String): String {
+        return try {
+            val uri = Uri.parse(uriString)
+            if (uri.scheme == "file") return uri.path ?: uriString
+
+            val ext = if (prefix == "img") ".jpg" else ".m4a"
+            val file = File(context.filesDir, "${prefix}_${System.currentTimeMillis()}$ext")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(file).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            file.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            uriString
+        }
+    }
+
+    // دریافت داده‌ها از سرور
     suspend fun pullData(dao: ItemDao) = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder().url("$baseUrl/sync.php?action=pull").build()
@@ -35,12 +56,10 @@ class SyncManager(private val context: Context, private val baseUrl: String) {
             if (!response.isSuccessful) return@withContext
 
             val body = response.body?.string() ?: return@withContext
-            val payload = gson.fromJson(body, SyncPayload::class.java)
+            val payload = gson.fromJson(body, SyncPayload::class.java) ?: return@withContext
 
             for (remote in payload.items) {
-                // دانلود تصویر
                 val localImg = downloadFileIfMissing(remote.imageFileName)
-                // دانلود صوت (در صورت وجود، مسیر متنی برگردانده می‌شود)
                 val localAud = if (remote.audioFileName.isNotBlank()) {
                     downloadFileIfMissing(remote.audioFileName).absolutePath
                 } else ""
@@ -60,7 +79,7 @@ class SyncManager(private val context: Context, private val baseUrl: String) {
         }
     }
 
-    // ارسال داده‌های ثبت‌شده محلی به هاست
+    // ارسال داده‌ها و آپلود فایل‌ها به هاست
     suspend fun pushData(items: List<BoardItem>) = withContext(Dispatchers.IO) {
         try {
             val remoteList = items.map { item ->
