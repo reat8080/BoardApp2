@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -24,6 +25,7 @@ import com.example.boardapp.ui.EditScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 val CalmLiteBlue = Color(0xFFEDF6FD)
 
@@ -36,7 +38,6 @@ class MainActivity : ComponentActivity() {
         val dao = db.itemDao()
         audioPlayer = AudioPlayer(this)
 
-        // دانلود داده‌های اولیه از سرور هنگام اجرا
         BackgroundSyncWorker.triggerInitialSync(this)
         BackgroundSyncWorker.scheduleDailySync(this)
 
@@ -55,7 +56,12 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MainApp(dao: ItemDao, audioPlayer: AudioPlayer, context: Context) {
+    val prefs = remember { context.getSharedPreferences("board_settings", Context.MODE_PRIVATE) }
+    var isPersian by remember { mutableStateOf(prefs.getBoolean("is_persian", true)) }
+    var scaleFactor by remember { mutableFloatStateOf(prefs.getFloat("scale_factor", 1.0f)) }
+
     var isEditMode by remember { mutableStateOf(false) }
+    var isSyncing by remember { mutableStateOf(false) }
     var itemToEdit by remember { mutableStateOf<BoardItem?>(null) }
     var currentParentId by remember { mutableStateOf<Long?>(null) }
     val backStack = remember { mutableStateListOf<Long?>() }
@@ -64,7 +70,6 @@ fun MainApp(dao: ItemDao, audioPlayer: AudioPlayer, context: Context) {
     val allItems by dao.getAllItems().collectAsState(initial = emptyList())
     val coroutineScope = rememberCoroutineScope()
 
-    // آدرس دقیق سرور هاست شما
     val serverBaseUrl = "https://omidanit.ca/boardapp"
     val syncManager = remember { SyncManager(context, serverBaseUrl) }
 
@@ -78,27 +83,49 @@ fun MainApp(dao: ItemDao, audioPlayer: AudioPlayer, context: Context) {
                 context = context,
                 allItems = allItems,
                 editingItem = itemToEdit,
-                onSave = { id, title, imgUri, audUri, parentId ->
+                isPersian = isPersian,
+                scaleFactor = scaleFactor,
+                isSyncing = isSyncing,
+                onToggleLanguage = {
+                    isPersian = !isPersian
+                    prefs.edit().putBoolean("is_persian", isPersian).apply()
+                },
+                onChangeScale = { newScale ->
+                    scaleFactor = newScale
+                    prefs.edit().putFloat("scale_factor", newScale).apply()
+                },
+                onManualSync = {
+                    coroutineScope.launch {
+                        isSyncing = true
+                        val success = syncManager.pullData(dao)
+                        isSyncing = false
+                        Toast.makeText(
+                            context,
+                            if (success) (if (isPersian) "همگام‌سازی با موفقیت انجام شد" else "Sync completed successfully")
+                            else (if (isPersian) "خطا در برقراری ارتباط با سرور" else "Sync failed"),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                onSave = { id, titleFa, titleEn, imgUri, audFa, audEn, parentId ->
                     coroutineScope.launch(Dispatchers.IO) {
-                        // ۱. کپی امن فایل‌ها به حافظه داخلی
                         val localImagePath = syncManager.copyUriToInternalStorage(imgUri, "img")
-                        val localAudioPath = if (audUri.isNotBlank()) {
-                            syncManager.copyUriToInternalStorage(audUri, "aud")
-                        } else ""
+                        val localAudFa = if (audFa.isNotBlank()) syncManager.copyUriToInternalStorage(audFa, "aud_fa") else ""
+                        val localAudEn = if (audEn.isNotBlank()) syncManager.copyUriToInternalStorage(audEn, "aud_en") else ""
 
-                        // ۲. ذخیره در دیتابیس گوشی
                         dao.insertItem(
                             BoardItem(
                                 id = id ?: 0,
-                                title = title,
+                                titleFa = titleFa,
+                                titleEn = titleEn,
                                 imageUri = localImagePath,
-                                audioUri = localAudioPath,
+                                audioUriFa = localAudFa,
+                                audioUriEn = localAudEn,
                                 parentId = parentId
                             )
                         )
                         itemToEdit = null
 
-                        // ۳. ارسال مستقیم و فوری فایل‌ها و متادیتا به هاست omidanit.ca
                         val updatedList = dao.getAllItems().first()
                         syncManager.pushData(updatedList)
                     }
@@ -109,7 +136,6 @@ fun MainApp(dao: ItemDao, audioPlayer: AudioPlayer, context: Context) {
                         if (itemToEdit?.id == item.id) {
                             itemToEdit = null
                         }
-                        // به‌روزرسانی هاست بعد از حذف آیتم
                         val updatedList = dao.getAllItems().first()
                         syncManager.pushData(updatedList)
                     }
@@ -134,6 +160,8 @@ fun MainApp(dao: ItemDao, audioPlayer: AudioPlayer, context: Context) {
                 items = currentItems,
                 allItems = allItems,
                 isRootScreen = backStack.isEmpty(),
+                isPersian = isPersian,
+                scaleFactor = scaleFactor,
                 audioPlayer = audioPlayer,
                 onNavigateToChild = { childId ->
                     backStack.add(currentParentId)
