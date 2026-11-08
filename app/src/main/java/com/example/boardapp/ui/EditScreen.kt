@@ -58,7 +58,8 @@ fun EditScreen(
     var selectedParentId by remember { mutableStateOf<Long?>(null) }
     var expanded by remember { mutableStateOf(false) }
 
-    var recordingLang by remember { mutableStateOf<String?>(null) }
+    // نگهدارنده زبانی که هم‌اکنون در حال ضبط است ("FA" یا "EN")
+    var recordingTarget by remember { mutableStateOf<String?>(null) }
     val audioRecorder = remember { AudioRecorder(context) }
 
     LaunchedEffect(editingItem) {
@@ -103,30 +104,39 @@ fun EditScreen(
     val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             if (audioRecorder.startRecording()) {
-                // start recording
+                // ضبط شروع شد
+            } else {
+                recordingTarget = null
             }
         } else {
-            Toast.makeText(context, if (isPersian) "دسترسی رد شد" else "Permission denied", Toast.LENGTH_SHORT).show()
-            recordingLang = null
+            Toast.makeText(context, if (isPersian) "دسترسی میکروفون رد شد" else "Microphone permission denied", Toast.LENGTH_SHORT).show()
+            recordingTarget = null
         }
     }
 
-    fun handleRecordClick(lang: String) {
-        if (recordingLang == null) {
-            val hasPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-            if (hasPerm) {
+    fun toggleRecording(target: String) {
+        if (recordingTarget == null) {
+            // شروع ضبط
+            val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+            if (hasPermission) {
                 if (audioRecorder.startRecording()) {
-                    recordingLang = lang
+                    recordingTarget = target
                 }
             } else {
-                recordingLang = lang
+                recordingTarget = target
                 micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             }
-        } else {
-            val path = audioRecorder.stopRecording()
-            if (recordingLang == "FA" && path != null) audioUriFa = path
-            if (recordingLang == "EN" && path != null) audioUriEn = path
-            recordingLang = null
+        } else if (recordingTarget == target) {
+            // توقف و ثبت مسیر
+            val savedPath = audioRecorder.stopRecording()
+            if (!savedPath.isNullOrBlank()) {
+                if (target == "FA") {
+                    audioUriFa = savedPath
+                } else if (target == "EN") {
+                    audioUriEn = savedPath
+                }
+            }
+            recordingTarget = null
         }
     }
 
@@ -137,7 +147,6 @@ fun EditScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // نوار بالا
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -159,7 +168,6 @@ fun EditScreen(
             }
         }
 
-        // بخش تنظیمات عمومی (زبان، اندازه کارت‌ها، دکمه سینک)
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -173,7 +181,6 @@ fun EditScreen(
                         color = Color(0xFF0D47A1)
                     )
 
-                    // دکمه تغییر زبان و سینک دستی
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -183,7 +190,7 @@ fun EditScreen(
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0288D1))
                         ) {
-                            Text(if (isPersian) "زبان: فارسی (تغییر به EN)" else "Language: English (Switch to FA)", fontSize = 12.sp)
+                            Text(if (isPersian) "زبان: فارسی (سوئیچ به EN)" else "Language: English (Switch to FA)", fontSize = 12.sp)
                         }
 
                         Button(
@@ -202,7 +209,6 @@ fun EditScreen(
                         }
                     }
 
-                    // تغییر ضریب اندازه دکمه‌ها (1x, 1.5x, 2x, 2.5x, 3x)
                     Text(
                         text = (if (isPersian) "اندازه کارت‌ها: " else "Card Scale: ") + "${scaleFactor}x",
                         fontSize = 13.sp,
@@ -224,7 +230,6 @@ fun EditScreen(
             }
         }
 
-        // بخش فرم افزودن / ویرایش کارت
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -238,7 +243,6 @@ fun EditScreen(
                         color = Color(0xFF0D47A1)
                     )
 
-                    // عنوان فارسی
                     OutlinedTextField(
                         value = titleFa,
                         onValueChange = { titleFa = it },
@@ -246,7 +250,6 @@ fun EditScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // عنوان انگلیسی
                     OutlinedTextField(
                         value = titleEn,
                         onValueChange = { titleEn = it },
@@ -254,7 +257,6 @@ fun EditScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // انتخاب عکس
                     Button(
                         onClick = { imagePicker.launch(arrayOf("image/*")) },
                         modifier = Modifier.fillMaxWidth(),
@@ -264,22 +266,22 @@ fun EditScreen(
                     }
 
                     // صوت فارسی
-                    Text(if (isPersian) "صوت فارسی (اختیاری):" else "Persian Audio (Optional):", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(if (isPersian) "صوت فارسی:" else "Persian Audio:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Button(
                             onClick = { audioFaPicker.launch(arrayOf("audio/*")) },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = if (audioUriFa.isBlank()) Color(0xFF1976D2) else Color(0xFF388E3C))
                         ) {
-                            Text(if (audioUriFa.isBlank()) (if (isPersian) "فایل صوت FA" else "Audio FA") else "FA ✓", fontSize = 11.sp)
+                            Text(if (audioUriFa.isBlank()) (if (isPersian) "فایل صوت FA" else "Audio File FA") else "FA ✓", fontSize = 11.sp)
                         }
 
                         Button(
-                            onClick = { handleRecordClick("FA") },
+                            onClick = { toggleRecording("FA") },
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = if (recordingLang == "FA") Color(0xFFD32F2F) else Color(0xFF0288D1))
+                            colors = ButtonDefaults.buttonColors(containerColor = if (recordingTarget == "FA") Color(0xFFD32F2F) else Color(0xFF0288D1))
                         ) {
-                            Text(if (recordingLang == "FA") (if (isPersian) "■ توقف" else "■ Stop") else (if (isPersian) "● ضبط FA" else "● Rec FA"), fontSize = 11.sp)
+                            Text(if (recordingTarget == "FA") (if (isPersian) "■ توقف FA" else "■ Stop FA") else (if (isPersian) "● ضبط FA" else "● Rec FA"), fontSize = 11.sp)
                         }
 
                         if (audioUriFa.isNotBlank()) {
@@ -290,22 +292,22 @@ fun EditScreen(
                     }
 
                     // صوت انگلیسی
-                    Text(if (isPersian) "صوت انگلیسی (اختیاری):" else "English Audio (Optional):", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(if (isPersian) "صوت انگلیسی:" else "English Audio:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Button(
                             onClick = { audioEnPicker.launch(arrayOf("audio/*")) },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = if (audioUriEn.isBlank()) Color(0xFF1976D2) else Color(0xFF388E3C))
                         ) {
-                            Text(if (audioUriEn.isBlank()) (if (isPersian) "فایل صوت EN" else "Audio EN") else "EN ✓", fontSize = 11.sp)
+                            Text(if (audioUriEn.isBlank()) (if (isPersian) "فایل صوت EN" else "Audio File EN") else "EN ✓", fontSize = 11.sp)
                         }
 
                         Button(
-                            onClick = { handleRecordClick("EN") },
+                            onClick = { toggleRecording("EN") },
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = if (recordingLang == "EN") Color(0xFFD32F2F) else Color(0xFF0288D1))
+                            colors = ButtonDefaults.buttonColors(containerColor = if (recordingTarget == "EN") Color(0xFFD32F2F) else Color(0xFF0288D1))
                         ) {
-                            Text(if (recordingLang == "EN") (if (isPersian) "■ توقف" else "■ Stop") else (if (isPersian) "● ضبط EN" else "● Rec EN"), fontSize = 11.sp)
+                            Text(if (recordingTarget == "EN") (if (isPersian) "■ توقف EN" else "■ Stop EN") else (if (isPersian) "● ضبط EN" else "● Rec EN"), fontSize = 11.sp)
                         }
 
                         if (audioUriEn.isNotBlank()) {
@@ -315,7 +317,7 @@ fun EditScreen(
                         }
                     }
 
-                    // انتخاب والد
+                    // جایگاه مادر
                     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
                         val parentName = allItems.find { it.id == selectedParentId }?.getTitle(isPersian)
                             ?: (if (isPersian) "بدون مادر (صفحه اصلی)" else "Root (Main Page)")
@@ -341,7 +343,6 @@ fun EditScreen(
                         }
                     }
 
-                    // دکمه‌های ثبت
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (editingItem != null) {
                             OutlinedButton(onClick = onCancelEditItem, modifier = Modifier.weight(1f)) {
@@ -371,7 +372,6 @@ fun EditScreen(
             }
         }
 
-        // عنوان لیست تمام کارت‌ها
         item {
             Text(
                 text = if (isPersian) "مدیریت جایگاه‌های ثبت شده:" else "Manage Existing Items:",
@@ -381,7 +381,6 @@ fun EditScreen(
             )
         }
 
-        // آیتم‌های ثبت شده
         items(allItems.size) { index ->
             val item = allItems[index]
             val parentName = allItems.find { it.id == item.parentId }?.getTitle(isPersian) ?: (if (isPersian) "صفحه اصلی" else "Root")
@@ -403,6 +402,11 @@ fun EditScreen(
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(text = "FA: ${item.titleFa} | EN: ${item.titleEn}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(
+                            text = "صوت: " + (if (item.audioUriFa.isNotBlank()) "FA ✓ " else "FA ✕ ") + (if (item.audioUriEn.isNotBlank()) "EN ✓" else "EN ✕"),
+                            fontSize = 11.sp,
+                            color = Color(0xFF1565C0)
+                        )
                         Text(text = "${if (isPersian) "والد:" else "Parent:"} $parentName", fontSize = 11.sp, color = Color.Gray)
                     }
                     IconButton(onClick = { onSelectToEdit(item) }) {
