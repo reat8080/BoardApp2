@@ -7,7 +7,6 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,10 +15,13 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -43,7 +45,8 @@ fun EditScreen(
     onToggleLanguage: () -> Unit,
     onChangeScale: (Float) -> Unit,
     onManualSync: () -> Unit,
-    onSave: (id: Long?, titleFa: String, titleEn: String, imgUri: String, audFa: String, audEn: String, parentId: Long?) -> Unit,
+    onToggleVisibility: (BoardItem) -> Unit,
+    onSave: (id: Long?, titleFa: String, titleEn: String, imgUri: String, audFa: String, audEn: String, parentId: Long?, isVisible: Boolean) -> Unit,
     onDelete: (BoardItem) -> Unit,
     onSelectToEdit: (BoardItem) -> Unit,
     onCancelEditItem: () -> Unit,
@@ -56,9 +59,9 @@ fun EditScreen(
     var audioUriFa by remember { mutableStateOf("") }
     var audioUriEn by remember { mutableStateOf("") }
     var selectedParentId by remember { mutableStateOf<Long?>(null) }
+    var isVisible by remember { mutableStateOf(true) }
     var expanded by remember { mutableStateOf(false) }
 
-    // نگهدارنده زبانی که هم‌اکنون در حال ضبط است ("FA" یا "EN")
     var recordingTarget by remember { mutableStateOf<String?>(null) }
     val audioRecorder = remember { AudioRecorder(context) }
 
@@ -70,6 +73,7 @@ fun EditScreen(
             audioUriFa = editingItem.audioUriFa
             audioUriEn = editingItem.audioUriEn
             selectedParentId = editingItem.parentId
+            isVisible = editingItem.isVisible
         } else {
             titleFa = ""
             titleEn = ""
@@ -77,6 +81,7 @@ fun EditScreen(
             audioUriFa = ""
             audioUriEn = ""
             selectedParentId = null
+            isVisible = true
         }
     }
 
@@ -103,9 +108,7 @@ fun EditScreen(
 
     val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
-            if (audioRecorder.startRecording()) {
-                // ضبط شروع شد
-            } else {
+            if (!audioRecorder.startRecording()) {
                 recordingTarget = null
             }
         } else {
@@ -116,7 +119,6 @@ fun EditScreen(
 
     fun toggleRecording(target: String) {
         if (recordingTarget == null) {
-            // شروع ضبط
             val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
             if (hasPermission) {
                 if (audioRecorder.startRecording()) {
@@ -127,7 +129,6 @@ fun EditScreen(
                 micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             }
         } else if (recordingTarget == target) {
-            // توقف و ثبت مسیر
             val savedPath = audioRecorder.stopRecording()
             if (!savedPath.isNullOrBlank()) {
                 if (target == "FA") {
@@ -343,6 +344,23 @@ fun EditScreen(
                         }
                     }
 
+                    // سوئیچ نمایش / عدم نمایش در صفحه اصلی
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = if (isPersian) "نمایش در بُرد اصلی:" else "Visible on Board:",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Switch(
+                            checked = isVisible,
+                            onCheckedChange = { isVisible = it }
+                        )
+                    }
+
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (editingItem != null) {
                             OutlinedButton(onClick = onCancelEditItem, modifier = Modifier.weight(1f)) {
@@ -353,12 +371,13 @@ fun EditScreen(
                         Button(
                             onClick = {
                                 if (canSave) {
-                                    onSave(editingItem?.id, titleFa, titleEn, imageUri!!, audioUriFa, audioUriEn, selectedParentId)
+                                    onSave(editingItem?.id, titleFa, titleEn, imageUri!!, audioUriFa, audioUriEn, selectedParentId, isVisible)
                                     titleFa = ""
                                     titleEn = ""
                                     imageUri = null
                                     audioUriFa = ""
                                     audioUriEn = ""
+                                    isVisible = true
                                 }
                             },
                             enabled = canSave,
@@ -385,19 +404,21 @@ fun EditScreen(
             val item = allItems[index]
             val parentName = allItems.find { it.id == item.parentId }?.getTitle(isPersian) ?: (if (isPersian) "صفحه اصلی" else "Root")
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .alpha(if (item.isVisible) 1f else 0.55f),
                 shape = RoundedCornerShape(10.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 Row(
                     modifier = Modifier.padding(8.dp).fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     AsyncImage(
                         model = item.imageUri,
                         contentDescription = null,
-                        modifier = Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)),
+                        modifier = Modifier.size(50.dp).clip(RoundedCornerShape(8.dp)),
                         contentScale = ContentScale.Crop
                     )
                     Column(modifier = Modifier.weight(1f)) {
@@ -408,6 +429,14 @@ fun EditScreen(
                             color = Color(0xFF1565C0)
                         )
                         Text(text = "${if (isPersian) "والد:" else "Parent:"} $parentName", fontSize = 11.sp, color = Color.Gray)
+                    }
+                    // دکمه سریع تغییر وضعیت نمایش/مخفی
+                    IconButton(onClick = { onToggleVisibility(item) }) {
+                        Icon(
+                            imageVector = if (item.isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = if (isPersian) "تغییر وضعیت نمایش" else "Toggle Visibility",
+                            tint = if (item.isVisible) Color(0xFF2E7D32) else Color.Gray
+                        )
                     }
                     IconButton(onClick = { onSelectToEdit(item) }) {
                         Icon(Icons.Default.Edit, contentDescription = null, tint = Color(0xFF1976D2))
