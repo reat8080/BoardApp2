@@ -11,7 +11,8 @@ data class BoardItem(
     val imageUri: String = "",
     val audioUriFa: String = "",
     val audioUriEn: String = "",
-    val parentId: Long? = null
+    val parentId: Long? = null,
+    val isVisible: Boolean = true
 ) {
     // تابع کمکی برای دریافت عنوان متناسب با زبان فعال
     fun getTitle(isFa: Boolean): String {
