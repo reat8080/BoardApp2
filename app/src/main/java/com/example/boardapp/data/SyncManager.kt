@@ -25,17 +25,24 @@ class SyncManager(private val context: Context, private val baseUrl: String) {
         val imageFileName: String,
         val audioFileNameFa: String,
         val audioFileNameEn: String,
-        val parentId: Long?
+        val parentId: Long?,
+        val isVisible: Boolean? = true
     )
 
     data class SyncPayload(val items: List<RemoteItem>)
 
     fun copyUriToInternalStorage(uriString: String, prefix: String): String {
+        if (uriString.isBlank()) return ""
         return try {
+            val directFile = File(uriString)
+            if (directFile.exists() && directFile.isAbsolute) {
+                return directFile.absolutePath
+            }
+
             val uri = Uri.parse(uriString)
             if (uri.scheme == "file") return uri.path ?: uriString
 
-            val ext = if (prefix == "img") ".jpg" else ".m4a"
+            val ext = if (prefix.startsWith("img")) ".jpg" else ".m4a"
             val file = File(context.filesDir, "${prefix}_${System.currentTimeMillis()}$ext")
             context.contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(file).use { output ->
@@ -71,7 +78,8 @@ class SyncManager(private val context: Context, private val baseUrl: String) {
                         imageUri = localImg.absolutePath,
                         audioUriFa = localAudFa,
                         audioUriEn = localAudEn,
-                        parentId = remote.parentId
+                        parentId = remote.parentId,
+                        isVisible = remote.isVisible ?: true
                     )
                 )
             }
@@ -96,7 +104,8 @@ class SyncManager(private val context: Context, private val baseUrl: String) {
                     imageFileName = uploadedImg,
                     audioFileNameFa = uploadedAudFa,
                     audioFileNameEn = uploadedAudEn,
-                    parentId = item.parentId
+                    parentId = item.parentId,
+                    isVisible = item.isVisible
                 )
             }
 
