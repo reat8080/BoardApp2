@@ -41,6 +41,9 @@ fun DisplayScreen(
     var clickCount by remember { mutableIntStateOf(0) }
     var lastClickTime by remember { mutableLongStateOf(0L) }
 
+    // فیلتر کردن آیتم‌ها: فقط گزینه‌هایی که نمایش آن‌ها فعال است
+    val visibleItems = remember(items) { items.filter { it.isVisible } }
+
     // محاسبه سایز کارت بر اساس ضریب مقیاس (پایه 140dp)
     val itemMinSize = (140 * scaleFactor).dp
     val fontSize = (16 * (1f + (scaleFactor - 1f) * 0.35f)).sp
@@ -78,7 +81,7 @@ fun DisplayScreen(
                 horizontalArrangement = Arrangement.spacedBy((16 * scaleFactor).dp),
                 contentPadding = PaddingValues(bottom = if (isRootScreen) 80.dp else 16.dp)
             ) {
-                items(items) { item ->
+                items(visibleItems) { item ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -87,7 +90,8 @@ fun DisplayScreen(
                                 if (audio.isNotBlank()) {
                                     audioPlayer.playAudio(audio)
                                 }
-                                if (allItems.any { it.parentId == item.id }) {
+                                // فقط اگر فرزند قابل نمایش داشته باشد وارد صفحه بعدی شود
+                                if (allItems.any { it.parentId == item.id && it.isVisible }) {
                                     onNavigateToChild(item.id)
                                 }
                             },
