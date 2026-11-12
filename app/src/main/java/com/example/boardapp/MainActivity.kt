@@ -25,7 +25,6 @@ import com.example.boardapp.ui.EditScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 val CalmLiteBlue = Color(0xFFEDF6FD)
 
@@ -107,7 +106,15 @@ fun MainApp(dao: ItemDao, audioPlayer: AudioPlayer, context: Context) {
                         ).show()
                     }
                 },
-                onSave = { id, titleFa, titleEn, imgUri, audFa, audEn, parentId ->
+                onToggleVisibility = { item ->
+                    coroutineScope.launch(Dispatchers.IO) {
+                        val updatedItem = item.copy(isVisible = !item.isVisible)
+                        dao.insertItem(updatedItem)
+                        val updatedList = dao.getAllItems().first()
+                        syncManager.pushData(updatedList)
+                    }
+                },
+                onSave = { id, titleFa, titleEn, imgUri, audFa, audEn, parentId, isVisible ->
                     coroutineScope.launch(Dispatchers.IO) {
                         val localImagePath = syncManager.copyUriToInternalStorage(imgUri, "img")
                         val localAudFa = if (audFa.isNotBlank()) syncManager.copyUriToInternalStorage(audFa, "aud_fa") else ""
@@ -121,7 +128,8 @@ fun MainApp(dao: ItemDao, audioPlayer: AudioPlayer, context: Context) {
                                 imageUri = localImagePath,
                                 audioUriFa = localAudFa,
                                 audioUriEn = localAudEn,
-                                parentId = parentId
+                                parentId = parentId,
+                                isVisible = isVisible
                             )
                         )
                         itemToEdit = null
